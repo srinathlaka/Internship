@@ -5,13 +5,15 @@ import numpy as np
 import string
 from eda_plots import *
 
+
+
 st.set_page_config(layout="wide",
-                   menu_items={
-                       'Get Help': 'https://www.extremelycoolapp.com/help',
-                       'Report a bug': "https://www.extremelycoolapp.com/bug",
-                       'About': "# developer : Srinath"
-                   }
-                   )
+                    menu_items={
+                        'Get Help': 'https://www.extremelycoolapp.com/help',
+                        'Report a bug': "https://www.extremelycoolapp.com/bug",
+                        'About': "# developer : Srinath"
+                    }
+                    )
 st.markdown(
     """
     <style>
@@ -37,8 +39,8 @@ uploaded_file = st.file_uploader("Choose a file", type=["xlsx", "csv"])
 # display the uploaded file
 if uploaded_file is not None:
     # Read the uploaded file
-    df = pd.read_excel(uploaded_file)
-    st.write("Uploaded File:")
+    df = pd.read_excel(uploaded_file, header=None)
+    st.success('File uploaded Successfully!', icon="✅")
     st.dataframe(df, use_container_width=True)
 
 # main code here
@@ -46,17 +48,11 @@ if uploaded_file is not None:
 rows = st.slider("Select number of rows", min_value=1, max_value=20, value=5)
 columns = st.slider("Select number of columns", min_value=1, max_value=20, value=6)
 
-column_labels = []
-column_labels = ["Time"]
-# Generate column labels
-# Generate column labels
-for row in range(1, rows + 1):
-    for col in range(0, columns):
-        label = string.ascii_uppercase[col] + str(row)
-        column_labels.append(label)
+labels = generate_labels(rows, columns)
+column_labels = ["Time"] + labels  # Add time as first column
 # Display the grid dimensions
 st.write(f"Grid dimensions: {rows} rows x {columns} columns")
-st.write(column_labels)
+#st.write(column_labels)
 
 df.columns = column_labels
 
@@ -75,23 +71,25 @@ class SessionState(object):
         for key, val in kwargs.items():
             setattr(self, key, val)
 
+# Display the selected wells
+selected_wells_message = st.empty()  # Placeholder to display selected wells
 
 # Initialize selected wells if not already initialized
 if 'selected_wells' not in st.session_state:
     st.session_state.selected_wells = set()
 
 with st.container():
-    for j in range(columns):
-        cols = st.columns(rows)
-        for i in range(rows):
+    for i in range(rows):
+        cols = st.columns(columns)
+        for j in range(columns):
             # Calculate the index in the labels list
-            index = j + i * columns
+            index = i * columns + j
             if index < len(labels):  # Ensure we don't go out of bounds
                 button_label = labels[index]
                 if button_label != "Time":  # Skip creating button for "Time" label
                     # Generate a unique key for each button using row and column indices
                     button_key = f"button_{i}_{j}"
-                    if cols[i].button(button_label, key=button_key):  # Update the list when a button is clicked
+                    if cols[j].button(button_label, key=button_key):  # Update the list when a button is clicked
                         fig, ax = plt.subplots(figsize=(10, 6))
                         ax.plot(df["Time"], df[button_label])
                         ax.set_title(f"Time vs OD of {button_label}")
@@ -104,18 +102,28 @@ with st.container():
                             st.session_state.selected_wells.add(button_label)
 # Display the selected wells
 st.write("Selected Wells:", st.session_state.selected_wells)
+
+def clear_selected_wells():
+    st.session_state.selected_wells.clear()
+    selected_wells_message.warning("Selected wells cleared.")
+
+# Display the clear button
+if st.button("Clear selected wells"):
+    clear_selected_wells()
+
+# Display the selected wells
+selected_wells_message.write("Selected Wells:", st.session_state.selected_wells)
+plots = st.checkbox("check the box  below to compare the plots of selected wells")
+
+if plots is  True:
+    fig, ax =  plt.subplots(figsize=(8,5))
+    x = df["Time"]
+    y = df[list(st.session_state.selected_wells)]
+    ax.plot(x, y)
+    ax.set_title(f"Time vs Slected well's OD")
+    st.pyplot(fig=fig)
+    
 s_d = st.checkbox("Show standard deviation")
 
 mean_data = df.mean(axis=1)  # Calculate mean along the columns
 std_data = df.std(axis=1)  # Calculate standard deviation along the columns
-
-st.write(df.describe())
-
-if s_d:
-    fig, ax = plt.subplots(figsize=(10, 6))
-    ax.errorbar(df['Time'], mean_data, yerr=std_data, fmt='-o', capsize=5)
-    ax.set_xlabel('Time')  # Label for the x-axis
-    ax.set_ylabel('Mean Measurement')  # Label for the y-axis
-    ax.set_title('Mean and Standard Deviation Plot')  # Plot title
-    ax.grid(True)
-    st.pyplot(fig, use_container_width=True)
