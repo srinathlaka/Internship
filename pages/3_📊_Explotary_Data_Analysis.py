@@ -1,40 +1,41 @@
 import streamlit as st
 import pandas as pd
-import altair as alt
+import matplotlib.pyplot as plt
 from urllib.error import URLError
-from eda_plots import *
+from eda_plots import generate_labels  # Import the generate_labels function
 
-st.set_page_config(page_title="Explotary Data Analysis", page_icon="📊")
+st.set_page_config(page_title="Exploratory Data Analysis", page_icon="📊")
 
-st.markdown("# Explotary Data Analysis")
-st.sidebar.header("Explotary Data Analysis")
-st.write(
-    """Please upload the files in .xlsx or .csv format only"""
-)
-
+st.markdown("# Exploratory Data Analysis")
+st.sidebar.header("Exploratory Data Analysis")
+st.write("""Please upload the files in .xlsx or .csv format only""")
 
 @st.cache_data
 def get_user_data(uploaded_file):
-  """
-  This function reads data from the uploaded file.
+    """
+    This function reads data from the uploaded file.
 
-  Args:
-      uploaded_file (streamlit.uploadedfile.UploadedFile): The uploaded file object.
+    Args:
+        uploaded_file (streamlit.uploadedfile.UploadedFile): The uploaded file object.
 
-  Returns:
-      pd.DataFrame: The DataFrame containing the uploaded data (if successful).
-  """
+    Returns:
+        pd.DataFrame: The DataFrame containing the uploaded data (if successful).
+    """
+    # Add your file reading logic here
+
 uploaded_file = st.file_uploader("Choose a file", type=["xlsx", "csv"])
 
 if uploaded_file is not None:
-  try:
-    st.success("File uploaded successfully!")
-    df = pd.read_excel(uploaded_file, header=None)
-    st.dataframe(df)
-  except Exception as e:
-    st.error(f"Error: {e}")
+    try:
+        st.success("File uploaded successfully!")
+        df = pd.read_excel(uploaded_file, header=None)
+        st.dataframe(df)
+    except FileNotFoundError:
+        st.error("File not found. Please upload a valid file.")
+    except Exception as e:
+        st.error(f"Error: {e}")
 else:
-  st.write("Please upload a file.")
+    st.write("Please upload a file.")
 
 
 # labeling the data
@@ -123,27 +124,27 @@ if plots is  True:
     ax.legend([str(i) for i in list(st.session_state.selected_wells)], loc='upper right')
     st.pyplot(fig=fig)
 
+
+df.dropna(axis=1, inplace=True)
+
 mean_data = df.mean(axis=1)  # Calculate mean along the columns
 std_data = df.std(axis=1)  # Calculate standard deviation along the columns
 
 average = st.checkbox("Check the box to view average of the selected wells")
 
+
 if average is True:
-    mean = df[list(st.session_state.selected_wells)].mean()
+    mean = df[list(st.session_state.selected_wells)].mean(axis=1)
     st.write(mean)
 
-    fig, ax = plt.subplots(figsize=(10, 6))
-    ax.bar(mean.index, mean, color='skyblue', edgecolor='black')
-    ax.set_xticks(range(len(mean)))
-    ax.set_xticklabels(mean.index, rotation=45)
-    ax.set_ylabel('Average')
-    ax.set_title('Average of Selected Wells')
-    ax.grid(axis='y', linestyle='--', alpha=0.6)
-    for i, v in enumerate(mean):
-        ax.text(i, v + 0.01, str(round(v, 2)), ha='center', va='bottom', fontsize=8)
+    plt.plot(df['Time'], mean, label='Average Measurement')
+    plt.xlabel('Time')  # Label for the x-axis
+    plt.ylabel('Average Measurement')  # Label for the y-axis
+    plt.title('Average Measurement for Selected Wells Over Time')  # Plot title
+    plt.grid(True)
     st.pyplot(fig)
 
-df.dropna(axis=1, inplace=True)
+
     
 s_d = st.checkbox("Show standard deviation")
 
