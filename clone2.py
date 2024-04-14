@@ -119,6 +119,8 @@ if uploaded_file is not None:
             ax.grid(True)
             st.pyplot(fig)
 
+            
+
         std_deviation = st.checkbox("Check the box to view standard deviation of the selected wells")
 
         if std_deviation and len(st.session_state.selected_wells) > 0:
@@ -155,8 +157,5 @@ if uploaded_file is not None:
         st.error("File not found. Please upload a valid file.")
     except Exception as e:
         st.error(f"Error: {e}")
-        
 else:
     st.write("Please select a file to upload.")
-
-

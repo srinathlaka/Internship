@@ -16,37 +16,26 @@ if uploaded_file is not None:
     try:
         st.success("File uploaded successfully!")
         df = pd.read_excel(uploaded_file, header=None)  # Read data
-        
+        # **Fix here:** Add this line only if df exists after reading the file
         if df is not None:  # Check if df is defined
-            layout_option = st.selectbox("Select layout option", ["Select from presets", "Custom"])
-            
-            if layout_option == "Select from presets":
-                well_format = st.selectbox("Select well format", ["24 well rows 4 column 6", 
-                                                                 "96 well rows 8 column 12",
-                                                                 "12 well rows 3 column 4",
-                                                                 "1536 well rows 32 column 48"])
-                
-                if well_format == "24 well rows 4 column 6":
-                    rows, columns = 4, 6
-                elif well_format == "96 well rows 8 column 12":
-                    rows, columns = 8, 12
-                elif well_format == "12 well rows 3 column 4":
-                    rows, columns = 3, 4
-                elif well_format == "1536 well rows 32 column 48":
-                    rows, columns = 32, 48
-            else:  # Custom layout
-                custom_rows = st.number_input("Enter number of rows", min_value=1, step=1)
-                custom_columns = st.number_input("Enter number of columns", min_value=1, step=1)
-                rows, columns = int(custom_rows), int(custom_columns)
+            # labeling the data
+            rows = st.slider("Select number of rows", min_value=1, max_value=20, value=5)
+            columns = st.slider("Select number of columns", min_value=1, max_value=20, value=6)
             labels = generate_labels(rows, columns)
             column_labels = ["Time"] + labels  # Add time as first column
-            
+            # Display the grid dimensions
             st.write(f"Grid dimensions: {rows} rows x {columns} columns")
 
             df.columns = column_labels
+            # df.dropna(axis=1, inplace=True)
+
             st.write(df)
 
+            # Display the list of button names
+
+            # List of labels
             labels = column_labels[1:]
+            # List to store selected wells
             selected_wells = set()
 
             class SessionState(object):
@@ -54,8 +43,10 @@ if uploaded_file is not None:
                     for key, val in kwargs.items():
                         setattr(self, key, val)
 
-            selected_wells_message = st.empty()
+            # Display the selected wells
+            selected_wells_message = st.empty()  # Placeholder to display selected wells
 
+            # Initialize selected wells if not already initialized
             if 'selected_wells' not in st.session_state:
                 st.session_state.selected_wells = set()
 
@@ -63,12 +54,14 @@ if uploaded_file is not None:
                 for i in range(rows):
                     cols = st.columns(columns)
                     for j in range(columns):
+                        # Calculate the index in the labels list
                         index = i * columns + j
-                        if index < len(labels):
+                        if index < len(labels):  # Ensure we don't go out of bounds
                             button_label = labels[index]
-                            if button_label != "Time":
+                            if button_label != "Time":  # Skip creating button for "Time" label
+                                # Generate a unique key for each button using row and column indices
                                 button_key = f"button_{i}_{j}"
-                                if cols[j].button(button_label, key=button_key):
+                                if cols[j].button(button_label, key=button_key):  # Update the list when a button is clicked
                                     fig, ax = plt.subplots(figsize=(10, 6))
                                     ax.plot(df["Time"], df[button_label])
                                     ax.set_title(f"Time vs OD of {button_label}")
@@ -80,6 +73,7 @@ if uploaded_file is not None:
                                     else:
                                         st.session_state.selected_wells.add(button_label)
 
+            # Display the selected wells
             selected_wells_text = f"Selected Wells: {st.session_state.selected_wells}"
             selected_wells_message.write(selected_wells_text)
 
@@ -87,41 +81,47 @@ if uploaded_file is not None:
             st.session_state.selected_wells.clear()
             selected_wells_message.warning("Selected wells cleared.")
 
+        # Display the clear button
         if st.button("Clear selected wells"):
             clear_selected_wells()
 
+        # Display the selected wells
         selected_wells_text = f"Selected Wells: {st.session_state.selected_wells}"
         selected_wells_message.write(selected_wells_text)
 
-        plots = st.checkbox("Check the box below to compare the plots of selected wells")
+        plots = st.checkbox("check the box below to compare the plots of selected wells")
 
         if plots:
             fig, ax = plt.subplots(figsize=(8, 5))
             x = df["Time"]
             y = df[list(st.session_state.selected_wells)]
             ax.plot(x, y)
-            ax.set_title(f"Time vs Selected well's OD")
+            ax.set_title(f"Time vs Slected well's OD")
             ax.legend([str(i) for i in list(st.session_state.selected_wells)], loc='upper right')
             st.pyplot(fig=fig)
 
         df.dropna(axis=1, inplace=True)
 
-        average = st.checkbox("Check the box to view the average of the selected wells")
+        mean_data = df.mean(axis=1)  # Calculate mean along the columns
+        std_data = df.std(axis=1)  # Calculate standard deviation along the columns
 
-        if average and len(st.session_state.selected_wells) > 0:
+        average = st.checkbox("Check the box to view average of the selected wells")
+
+        if average is True and len(st.session_state.selected_wells) > 0:
+            # Ensure there are selected wells before calculating the average
             selected_wells_list = list(st.session_state.selected_wells)
-            df['Average'] = df[selected_wells_list].mean(axis=1)
-            fig, ax = plt.subplots(figsize=(10, 6))
-            ax.plot(df['Time'], df['Average'], label='Average Measurement')
-            ax.set_xlabel('Time')
-            ax.set_ylabel('Average Measurement')
-            ax.set_title('Average Measurement for Selected Wells Over Time')
-            ax.grid(True)
+            mean_data = df[selected_wells_list].mean(axis=1)  # Calculate mean of selected wells
+
+            plt.plot(df['Time'], mean_data, label='Average Measurement')
+            plt.xlabel('Time')  # Label for the x-axis
+            plt.ylabel('Average Measurement')  # Label for the y-axis
+            plt.title('Average Measurement for Selected Wells Over Time')  # Plot title
+            plt.grid(True)
             st.pyplot(fig)
 
-        std_deviation = st.checkbox("Check the box to view standard deviation of the selected wells")
+        s_d = st.checkbox("Show standard deviation")
 
-        if std_deviation and len(st.session_state.selected_wells) > 0:
+        if s_d and len(st.session_state.selected_wells) > 0:
             std = df[list(st.session_state.selected_wells)].std().sort_values()
             fig, ax = plt.subplots(figsize=(10, 6))
             ax.errorbar(std.index, [0] * len(std), yerr=std, fmt='o', color='b', markersize=8, capsize=5)
@@ -132,31 +132,26 @@ if uploaded_file is not None:
             ax.grid(True, linestyle='--', alpha=0.6)
             st.pyplot(fig)
 
-        std_deviation_percentage = st.checkbox("Check the box to view standard deviation as a percentage of average.")
+        s_d_a = st.checkbox("Show standard deviation as a percentage of average.")
 
-        if std_deviation_percentage and len(st.session_state.selected_wells) > 0:
-            selected_wells_list = list(st.session_state.selected_wells)
-            mean_data_selected = df[selected_wells_list].mean(axis=1)
-            std_data_selected = df[selected_wells_list].std(axis=1)
-
+        if  s_d_a and len(st.session_state.selected_wells) > 0:
+            # Plot average and standard deviation
             fig, ax = plt.subplots(figsize=(10, 6))
-            for col in selected_wells_list:
+            for col in df.columns[1:]:  # Exclude the 'Time' column
                 ax.plot(df['Time'], df[col], label=col)
 
-            ax.errorbar(df['Time'], mean_data_selected, yerr=std_data_selected, fmt='o', color='black', label='Average ± Std. Deviation')
+            ax.errorbar(df['Time'], mean_data, yerr=std_data, fmt='o', color='black', label='Average ± Std. Deviation')
 
             ax.set_xlabel('Time')
             ax.set_ylabel('Measurement')
-            ax.set_title('Average and Standard Deviation Plot for Selected Wells')
+            ax.set_title('Average and Standard Deviation Plot')
             ax.legend()
+            
             st.pyplot(fig)
 
     except FileNotFoundError:
         st.error("File not found. Please upload a valid file.")
     except Exception as e:
         st.error(f"Error: {e}")
-        
 else:
-    st.write("Please select a file to upload.")
-
-
+    st.write("Please upload a file.")

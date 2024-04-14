@@ -7,7 +7,7 @@ st.set_page_config(
 
 st.write("# Welcome to Growth Analyser! ⚡")
 
-st.sidebar.success("Select a demo above.")
+st.sidebar.success("pages loaded")
 
 st.markdown(
     """

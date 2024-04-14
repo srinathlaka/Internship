@@ -123,19 +123,19 @@ def create_grid_app():
 
 def generate_labels(rows, cols):
     """
-  Generates a list of labels for a grid with the specified rows and columns.
+    Generates a list of labels for a grid with the specified rows and columns.
 
-  Args:
-      rows: The number of rows in the grid.
-      cols: The number of columns in the grid.
+    Args:
+        rows: The number of rows in the grid.
+        cols: The number of columns in the grid.
 
-  Returns:
-      A list of labels in the format "A1", "A2", ..., "B1", "B2", ..., "Zn"
-      where n is the total number of cells (rows * cols).
-  """
+    Returns:
+        A list of labels in the format "A1", "A2", ..., "B1", "B2", ..., "Zn"
+        where n is the total number of cells (rows * cols).
+    """
     labels = []
-    for row in range(rows):
-        for col in range(cols):
-            label = chr(ord('A') + row) + str(col + 1)
-            labels.append(label)
+    total_cells = rows * cols
+    for i in range(total_cells):
+        label = chr(ord('A') + i // cols) + str(i % cols + 1)
+        labels.append(label)
     return labels
