@@ -43,16 +43,14 @@ def plot_fitted_curves(df, model, parameters):
     ax.plot(df['Time'], df['Average'], label='Observed Data')
 
     if model == 'Polynomial':
-        n_guess = 2  # Assuming n_guess is always 2 for the degree of the polynomial
         y_pred = np.polyval(parameters, df['Time'])
     elif model == 'Saturation':
-        # You need to provide initial guesses for saturation growth model
-        # and use fit_saturation_growth function
-        y_pred = fit_saturation_growth(df['Time'], df['Average'])
+        y_pred = saturation_growth_model(df['Time'], *parameters)
     elif model == 'Repression':
-        # You need to provide initial guesses for repression growth model
-        # and use fit_repression_growth function
-        y_pred = fit_repression_growth(df['Time'], df['Average'])
+        y_pred = repression_growth_model(df['Time'], *parameters)
+    else:
+        st.warning("Invalid model type. Supported models are 'Polynomial', 'Saturation', and 'Repression'.")
+        return
 
     ax.plot(df['Time'], y_pred, label='Fitted Curve', color='red')
     
@@ -69,11 +67,12 @@ def plot_fitted_curves(df, model, parameters):
     st.write("Shape of y_pred:", y_pred.shape)
 
 
+
 def fit_growth_model(model_type, data_x, data_y):
     """Fit selected growth model to data."""
     if model_type == "Polynomial":
         # Degree of the polynomial growth model
-        n_guess = 5  # or any other value for the degree
+        n_guess = 10  # or any other value for the degree
         return fit_polynomial_growth(data_x, data_y, n_guess)
     elif model_type == "Saturation":
         n_guess = 2
@@ -87,23 +86,32 @@ def fit_growth_model(model_type, data_x, data_y):
 
 
 
-def plot_avg_and_std(df, selected_wells):
+def plot_avg_and_std(df, selected_wells, y_pred=None, std_dev=None, log_scale=False):
     if len(selected_wells) > 0:
         selected_wells_list = list(selected_wells)
-        mean_data_selected = df[selected_wells_list].mean(axis=1)
-        std_data_selected = df[selected_wells_list].std(axis=1)
-
+        df['Average'] = df[selected_wells_list].mean(axis=1)
+        if std_dev is not None:
+            df['Std Dev'] = df[selected_wells_list].std(axis=1)
+        
         fig, ax = plt.subplots(figsize=(10, 6))
-
-        ax.plot(df['Time'], mean_data_selected, label='Average Measurement')
-        ax.fill_between(df['Time'], mean_data_selected - std_data_selected, mean_data_selected + std_data_selected, alpha=0.3, label='Standard Deviation')
-
+        
+        if log_scale:
+            ax.set_yscale('log')  # Set y-axis scale to logarithmic if log_scale is True
+        
+        ax.plot(df['Time'], df['Average'], label='Average Measurement')
+        
+        if y_pred is not None:
+            ax.plot(df['Time'], y_pred, label='Fitted Curve', color='red')
+        
+        if std_dev is not None:
+            ax.fill_between(df['Time'], df['Average'] - std_dev, df['Average'] + std_dev, color='green', alpha=0.3, label='Standard Deviation')
+        
         ax.set_xlabel('Time')
-        ax.set_ylabel('Measurement')
-        ax.set_title('Average and Standard Deviation Plot for Selected Wells')
+        ax.set_ylabel('Average Measurement')
+        ax.set_title('Average Measurement with Standard Deviation')
+        ax.grid(True)
         ax.legend()
         st.pyplot(fig)
-
 
 
 
@@ -185,7 +193,7 @@ def clear_selected_wells(session_key, message):
     st.session_state[session_key].clear()
     message.warning("Selected wells cleared.")
 
-def perform_background_subtraction(df, selected_blank_wells, selected_sample_replicates):
+def perform_background_subtraction(df, selected_blank_wells, selected_sample_replicates, y_pred):
     if len(selected_blank_wells) == 0 or len(selected_sample_replicates) == 0:
         st.warning("Please select both blank wells and sample replicates for subtraction.")
         return None
@@ -198,9 +206,10 @@ def perform_background_subtraction(df, selected_blank_wells, selected_sample_rep
     
     # Perform background subtraction
     for sample_replicate in selected_sample_replicates:
-        df[sample_replicate] = df[sample_replicate] - blank_mean
+        df[sample_replicate] = df[sample_replicate] - y_pred  # Subtract the fitted curve values
     
     return df
+
 
 #rows, columns = select_layout()
 
@@ -230,6 +239,8 @@ def main():
             selected_blank_wells_message = st.empty()
             selected_blank_wells = select_wells(df, rows, columns, labels, selected_blank_wells_message, "selected_blank_wells")
 
+            std_dev_blank_cells = df[selected_blank_wells].std(axis=1)
+            
             plots_before_bg_subtraction = st.checkbox("Check the box below to compare the plots of selected blank wells")
             if plots_before_bg_subtraction:
                 plot_selected_wells(df, selected_blank_wells)
@@ -244,10 +255,22 @@ def main():
                         st.write("Fit of the average blank cells")
                         popt = fit_growth_model(selected_model, df['Time'], df['Average'])
                         st.write("Parameter values (popt):", popt)  # Add this line to print out popt
-                        # Plot the fitted curve alongside the observed data
+                        # Calculate y_pred based on the selected growth model and its parameters
+                        if selected_model == "Polynomial":
+                            y_pred = np.polyval(popt, df['Time'])
+                        elif selected_model == "Saturation":
+                            popt, y_pred = fit_saturation_growth(df['Time'], df['Average'])
+                        elif selected_model == "Repression":
+                            y_pred = fit_repression_growth(df['Time'], df['Average'])
+
                         plot_fitted_curves(df, selected_model, popt)
-                        
-                        plot_avg_and_std(df, selected_blank_wells)
+
+                        # Plot the fitted curve alongside the average and standard deviation plot
+                        plot_avg_and_std(df, selected_blank_wells, y_pred, std_dev_blank_cells)
+                        log_scale = st.checkbox("Plot on logarithmic scale")
+                        plot_avg_and_std(df, selected_blank_wells, y_pred, std_dev_blank_cells, log_scale=log_scale)
+
+
             clear_blank_wells_button = st.button("Clear selected blank wells")
             if clear_blank_wells_button:
                 clear_selected_wells("selected_blank_wells", selected_blank_wells_message)
@@ -260,7 +283,7 @@ def main():
                 clear_selected_wells("selected_sample_replicates", selected_sample_replicates_message)
             Perform_Background_Subtraction = st.checkbox("Check the box below to perform background subtraction")
             if Perform_Background_Subtraction is True:
-                df_bg_subtracted = perform_background_subtraction(df.copy(), selected_blank_wells, selected_sample_replicates)
+                df_bg_subtracted = perform_background_subtraction(df.copy(), selected_blank_wells, selected_sample_replicates, y_pred)
                 if df_bg_subtracted is not None:
                     st.success("Background subtraction completed successfully!")
                     st.write(df_bg_subtracted)
@@ -270,7 +293,7 @@ def main():
 
                     plot_average(df_bg_subtracted, selected_wells)
 
-                    plot_avg_and_std(df_bg_subtracted, selected_wells)
+                    #plot_avg_and_std(df_bg_subtracted, selected_wells)
 
                     fit_growth = st.checkbox("Fit Growth Model")
 

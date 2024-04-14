@@ -10,7 +10,7 @@ def saturation_growth_model(x, a, k0, b):
     return a * x / (x + k0) + b
 
 # Repression growth model
-def repression_growth_model(x, a, k0, b):
+def repression_growth_model(x, a, k0, b=0):
     """Repression growth model function."""
     return a / (k0 * x + k0) + b
 
@@ -36,10 +36,10 @@ def fit_repression_growth(data_x, data_y):
     """Fit repression growth model to data."""
     try:
         popt, _ = curve_fit(repression_growth_model, data_x, data_y)
-        y_pred = repression_growth_model(data_x, *popt)  # Calculate the predicted values
-        return popt, np.array(y_pred).flatten()  # Convert to NumPy array and flatten
+        return popt
     except RuntimeError:
         print("Optimal parameters could not be found. Check if the input data is suitable.")
+
 
 
 
