@@ -313,23 +313,23 @@ def perform_background_subtraction(df, selected_blank_wells, selected_sample_rep
 def main():
     st.set_page_config(page_title="Bacterial Growth Analysis", page_icon="🔬", layout="wide")
 
-    # Add custom HTML and CSS for the background
-    st.markdown(
-        """
-        <style>
-        body {
-            background-image: url("https://images.unsplash.com/photo-1593642532973-d31b6557fa68");
-            background-size: cover;
-        }
-        .stApp {
-            background-color: rgba(255, 255, 255, 0.85);
-            border-radius: 15px;
-            padding: 10px;
-        }
-        </style>
-        """, 
-        unsafe_allow_html=True
-    )
+    # # Add custom HTML and CSS for the background
+    # st.markdown(
+    #     """
+    #     <style>
+    #     body {
+    #         background-image: url("https://images.unsplash.com/photo-1593642532973-d31b6557fa68");
+    #         background-size: cover;
+    #     }
+    #     .stApp {
+    #         background-color: rgba(255, 255, 255, 0.85);
+    #         border-radius: 15px;
+    #         padding: 10px;
+    #     }
+    #     </style>
+    #     """, 
+    #     unsafe_allow_html=True
+    # )
 
     with st.expander("Instructions for Using the Bacterial Growth Analysis Tool"):
         st.markdown("""
