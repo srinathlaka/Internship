@@ -9,12 +9,16 @@ import plotly.graph_objects as go
 def polynomial_growth(x, a, n, b):
     return a * np.power(x, n) + b
 
+# Define the polynomial function (quadratic)
+def polynomial_func(t, a, b, c):
+    return a * t**2 + b * t + c
+
 # Compute normal confidence intervals
 def compute_confidence_intervals(time, params, covariance, alpha, dof, residual_variance):
     t_critical = t.ppf(1 - alpha / 2, dof)
     J = np.zeros((len(time), len(params)))
     J[:, 0] = np.power(time, params[1])
-    J[:, 1] = params[0] * np.log(time) * np.power(time, params[1])
+    J[:, 1] = params[0] * np.log(time + 1e-8) * np.power(time, params[1])  # Adding small constant to avoid log(0)
     J[:, 2] = 1
     conf_interval = np.zeros(len(time))
     fitted_od_growth = polynomial_growth(time, *params)
@@ -88,14 +92,12 @@ def plot_fitted_curves(df, model, parameters):
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=df['Time'], y=df['Average'], mode='lines', name='Observed Data'))
 
-    if model == 'Polynomial':
+    if model == 'Polynomial Growth':
         y_pred = polynomial_growth(df['Time'], *parameters)
-    elif model == 'Saturation':
-        y_pred = saturation_growth_model(df['Time'], *parameters)
-    elif model == 'Repression':
-        y_pred = repression_growth_model(df['Time'], *parameters)
+    elif model == 'Polynomial Function':
+        y_pred = polynomial_func(df['Time'], *parameters)
     else:
-        st.warning("Invalid model type. Supported models are 'Polynomial', 'Saturation', and 'Repression'.")
+        st.warning("Invalid model type. Supported models are 'Polynomial Growth' and 'Polynomial Function'.")
         return
 
     fig.add_trace(go.Scatter(x=df['Time'], y=y_pred, mode='lines', name='Fitted Curve', line=dict(color='red')))
@@ -155,13 +157,12 @@ def plot_confidence_intervals(df, lower_bound, upper_bound, y_pred, std_dev):
 
 # Fit growth model
 def fit_growth_model(model_type, data_x, data_y):
-    if model_type == "Polynomial":
+    if model_type == "Polynomial Growth":
         popt, pcov = curve_fit(polynomial_growth, data_x, data_y)
         return popt, pcov
-    elif model_type == "Saturation":
-        return fit_saturation_growth(data_x, data_y)
-    elif model_type == "Repression":
-        return fit_repression_growth(data_x, data_y)
+    elif model_type == "Polynomial Function":
+        popt, pcov = curve_fit(polynomial_func, data_x, data_y)
+        return popt, pcov
     else:
         raise ValueError("Invalid model type")
 
@@ -311,13 +312,13 @@ def perform_background_subtraction(df, selected_blank_wells, selected_sample_rep
 
 def main():
     st.set_page_config(page_title="Bacterial Growth Analysis", page_icon="🔬", layout="wide")
-    
+
     # Add custom HTML and CSS for the background
     st.markdown(
         """
         <style>
         body {
-            background-image: url("https://www.example.com/background.jpg");
+            background-image: url("https://images.unsplash.com/photo-1593642532973-d31b6557fa68");
             background-size: cover;
         }
         .stApp {
@@ -329,8 +330,28 @@ def main():
         """, 
         unsafe_allow_html=True
     )
-    
-    st.markdown("<h1 style='text-align: center; color: #4CAF50;'>Bacterial Growth Analysis</h1>", unsafe_allow_html=True)
+
+    with st.expander("Instructions for Using the Bacterial Growth Analysis Tool"):
+        st.markdown("""
+        1. **Upload Your Data**:
+           - Click on "Choose a file" to upload your dataset in .xlsx or .csv format. Ensure your data includes a 'Time' column and OD measurements for each well.
+
+        2. **Select Well Layout**:
+           - Choose a pre-defined well layout from the dropdown or enter custom dimensions for rows and columns.
+
+        3. **Select Wells for Analysis**:
+           - Use the generated buttons to select wells for blanks and samples. Selected wells will be highlighted.
+
+        4. **Fit Growth Model**:
+           - Choose the desired growth model (Polynomial Growth or Polynomial Function) and fit the model to your data. View the fitted curve and confidence intervals.
+
+        5. **Background Subtraction**:
+           - Perform background subtraction by selecting blank wells and sample replicates. The adjusted data will be displayed for further analysis.
+
+        6. **Visualize Results**:
+           - View various plots including the observed data, fitted curves, average measurements, and standard deviations. Toggle options to customize the display.
+        """)
+
     st.sidebar.header("Bacterial Growth Analysis")
     st.write("Please upload the files in .xlsx or .csv format only")
 
@@ -363,11 +384,14 @@ def main():
                 plot_average(df, selected_blank_wells)
                 fit_average = st.checkbox("Fit average")
                 if fit_average:
-                    selected_model = "Polynomial"
+                    selected_model = st.selectbox("Select Growth Model", ["Polynomial Growth", "Polynomial Function"])
                     st.write("Fit of the average blank cells")
                     popt, pcov = fit_growth_model(selected_model, df['Time'], df['Average'])
                     st.write("Parameter values (popt):", popt)
-                    y_pred = polynomial_growth(df['Time'], *popt)
+                    if selected_model == "Polynomial Growth":
+                        y_pred = polynomial_growth(df['Time'], *popt)
+                    elif selected_model == "Polynomial Function":
+                        y_pred = polynomial_func(df['Time'], *popt)
 
                     plot_avg_and_std(df, selected_blank_wells, y_pred, std_dev_blank_cells)
 
@@ -400,6 +424,16 @@ def main():
                     plot_selected_wells(df_bg_subtracted, selected_wells)
                     plot_average(df_bg_subtracted, selected_wells)
                     plot_avg_and_std(df_bg_subtracted, selected_wells, y_pred=y_pred, std_dev=std_dev_blank_cells)
+
+    # Add the citation for the background image
+    st.markdown(
+        """
+        <div style='text-align: center; margin-top: 20px;'>
+            <small>Background image by <a href="https://unsplash.com/@napr0tiv?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Michael Dziedzic</a> on Unsplash</small>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
 
 if __name__ == "__main__":
     main()
