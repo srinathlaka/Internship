@@ -4,6 +4,7 @@ import numpy as np
 from scipy.optimize import curve_fit
 from scipy.stats import t
 import plotly.express as px
+import os
 import plotly.graph_objects as go
 
 # Define growth models
