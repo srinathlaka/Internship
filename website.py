@@ -3,15 +3,36 @@ import pandas as pd
 import numpy as np
 from scipy.optimize import curve_fit
 from scipy.stats import t
+import plotly.express as px
 import plotly.graph_objects as go
 
-# Define the polynomial growth model
+# Define growth models
 def polynomial_growth(x, a, n, b):
     return a * np.power(x, n) + b
 
-# Define the polynomial function (quadratic)
 def polynomial_func(t, a, b, c):
     return a * t**2 + b * t + c
+
+def exponential_growth(t, mu, X0):
+    return X0 * np.exp(mu * t)
+
+def logistic_growth(t, mu, X0, K):
+    return (X0 * np.exp(mu * t)) / (1 + (X0 / K) * (np.exp(mu * t) - 1))
+
+def baranyi_growth(t, X0, mu, q0):
+    q_t = q0 * np.exp(mu * t)
+    return X0 * (1 + q_t) / (1 + q0)
+
+def lag_exponential_saturation_growth(t, mu, X0, q0, K):
+    return X0 * (1 + q0 * np.exp(mu * t)) / (1 + q0 - q0 * (X0 / K) + (q0 * X0 / K) * np.exp(mu * t))
+
+# Function to calculate model metrics
+def calculate_metrics(observed, predicted, num_params):
+    residuals = observed - predicted
+    rss = np.sum(residuals**2)
+    r_squared = 1 - (rss / np.sum((observed - np.mean(observed))**2))
+    aic = 2 * num_params + len(observed) * np.log(rss / len(observed))
+    return rss, r_squared, aic
 
 # Compute normal confidence intervals
 def compute_confidence_intervals(time, params, covariance, alpha, dof, residual_variance):
@@ -88,20 +109,11 @@ def create_button_layout(rows, columns, labels):
     st.write("Selected Wells:", ', '.join(selected_wells))
 
 # Plot fitted curves with Plotly
-def plot_fitted_curves(df, model, parameters):
+def plot_fitted_curves(df, time, observed, fitted, model_name):
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=df['Time'], y=df['Average'], mode='lines', name='Observed Data'))
-
-    if model == 'Polynomial Growth':
-        y_pred = polynomial_growth(df['Time'], *parameters)
-    elif model == 'Polynomial Function':
-        y_pred = polynomial_func(df['Time'], *parameters)
-    else:
-        st.warning("Invalid model type. Supported models are 'Polynomial Growth' and 'Polynomial Function'.")
-        return
-
-    fig.add_trace(go.Scatter(x=df['Time'], y=y_pred, mode='lines', name='Fitted Curve', line=dict(color='red')))
-    fig.update_layout(title='Fitted Growth Model', xaxis_title='Time', yaxis_title='OD', legend_title='Legend', template='plotly_white')
+    fig.add_trace(go.Scatter(x=time, y=observed, mode='lines', name='Observed Data'))
+    fig.add_trace(go.Scatter(x=time, y=fitted, mode='lines', name=f'Fitted Curve ({model_name})', line=dict(color='red')))
+    fig.update_layout(title=f'Fitted {model_name} Model', xaxis_title='Time', yaxis_title='OD', legend_title='Legend', template='plotly_white')
     st.plotly_chart(fig)
 
 # Plot confidence intervals with Plotly
@@ -296,7 +308,7 @@ def clear_selected_wells(session_key, message):
     st.session_state[session_key].clear()
     message.warning("Selected wells cleared.")
 
-# Perform background subtraction
+# Perform background subtraction and model fitting
 def perform_background_subtraction(df, selected_blank_wells, selected_sample_replicates, y_pred):
     if len(selected_blank_wells) == 0 or len(selected_sample_replicates) == 0:
         st.warning("Please select both blank wells and sample replicates for subtraction.")
@@ -306,30 +318,13 @@ def perform_background_subtraction(df, selected_blank_wells, selected_sample_rep
     blank_mean = df[selected_blank_wells_list].mean(axis=1)
 
     for sample_replicate in selected_sample_replicates:
-        df[sample_replicate] = df[sample_replicate] - y_pred
+        df[sample_replicate] = df[sample_replicate] - blank_mean
 
     return df
 
 def main():
     st.set_page_config(page_title="Bacterial Growth Analysis", page_icon="🔬", layout="wide")
-
-    # # Add custom HTML and CSS for the background
-    # st.markdown(
-    #     """
-    #     <style>
-    #     body {
-    #         background-image: url("https://images.unsplash.com/photo-1593642532973-d31b6557fa68");
-    #         background-size: cover;
-    #     }
-    #     .stApp {
-    #         background-color: rgba(255, 255, 255, 0.85);
-    #         border-radius: 15px;
-    #         padding: 10px;
-    #     }
-    #     </style>
-    #     """, 
-    #     unsafe_allow_html=True
-    # )
+    st.markdown("<h1 style='text-align: center; color: #4CAF50;'>Bacterial Growth Analysis</h1>", unsafe_allow_html=True)
 
     with st.expander("Instructions for Using the Bacterial Growth Analysis Tool"):
         st.markdown("""
@@ -353,7 +348,7 @@ def main():
         """)
 
     st.sidebar.header("Bacterial Growth Analysis")
-    st.write("Please upload the files in .xlsx or .csv format only")
+    st.sidebar.write("Please upload the files in .xlsx or .csv format only")
 
     rows, columns = select_layout()
     uploaded_file = upload_file()
@@ -371,15 +366,16 @@ def main():
                 st.write(f"Number of columns in DataFrame: {df.shape[1]}")
                 return
 
+            st.subheader("Select Blank Wells")
             selected_blank_wells_message = st.empty()
             selected_blank_wells = select_wells(df, rows, columns, labels, selected_blank_wells_message, "selected_blank_wells")
             std_dev_blank_cells = df[selected_blank_wells].std(axis=1)
 
-            plots_before_bg_subtraction = st.checkbox("Check the box below to compare the plots of selected blank wells")
+            plots_before_bg_subtraction = st.checkbox("Compare plots of selected blank wells")
             if plots_before_bg_subtraction:
                 plot_selected_wells(df, selected_blank_wells)
 
-            average_blank_cells = st.checkbox("Check the box to view the average of the selected blank wells")
+            average_blank_cells = st.checkbox("View average of selected blank wells")
             if average_blank_cells:
                 plot_average(df, selected_blank_wells)
                 fit_average = st.checkbox("Fit average")
@@ -407,6 +403,7 @@ def main():
             if clear_blank_wells_button:
                 clear_selected_wells("selected_blank_wells", selected_blank_wells_message)
 
+            st.subheader("Select Sample Replicates")
             selected_sample_replicates_message = st.empty()
             selected_sample_replicates = select_wells(df, rows, columns, labels, selected_sample_replicates_message, "selected_sample_replicates")
 
@@ -414,7 +411,7 @@ def main():
             if clear_sample_replicates_button:
                 clear_selected_wells("selected_sample_replicates", selected_sample_replicates_message)
 
-            Perform_Background_Subtraction = st.checkbox("Check the box below to perform background subtraction")
+            Perform_Background_Subtraction = st.checkbox("Perform background subtraction")
             if Perform_Background_Subtraction:
                 df_bg_subtracted = perform_background_subtraction(df.copy(), selected_blank_wells, selected_sample_replicates, y_pred)
                 if df_bg_subtracted is not None:
@@ -422,18 +419,113 @@ def main():
                     st.write(df_bg_subtracted)
                     selected_wells = st.session_state.selected_sample_replicates
                     plot_selected_wells(df_bg_subtracted, selected_wells)
+                    
                     plot_average(df_bg_subtracted, selected_wells)
-                    plot_avg_and_std(df_bg_subtracted, selected_wells, y_pred=y_pred, std_dev=std_dev_blank_cells)
+                    plot_avg_and_std(df_bg_subtracted, selected_wells)
 
-    # Add the citation for the background image
-    st.markdown(
-        """
-        <div style='text-align: center; margin-top: 20px;'>
-            <small>Background image by <a href="https://unsplash.com/@napr0tiv?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Michael Dziedzic</a> on Unsplash</small>
-        </div>
-        """, 
-        unsafe_allow_html=True
-    )
+                # Manual phase selection
+                st.write("### Select Phases Manually")
+                lag_phase_end_time = st.number_input('Lag Phase End Time', min_value=float(df['Time'].min()), max_value=float(df['Time'].max()), value=2400.0)
+                log_phase_end_time = st.number_input('Log Phase End Time', min_value=float(df['Time'].min()), max_value=float(df['Time'].max()), value=49000.0)
+                stationary_phase_end_time = st.number_input('Stationary Phase End Time', min_value=float(df['Time'].min()), max_value=float(df['Time'].max()), value=69000.0)
+                death_phase_end_time = st.number_input('Death Phase End Time', min_value=float(df['Time'].min()), max_value=float(df['Time'].max()), value=float(df['Time'].max()))
+
+                phase_to_fit = st.selectbox('Select Phase to Fit', ['Lag Phase', 'Log Phase', 'Stationary Phase', 'Death Phase'])
+
+                # Determine the start and end times for the selected phase
+                if phase_to_fit == 'Lag Phase':
+                    fit_start_time = 0
+                    fit_end_time = lag_phase_end_time
+                elif phase_to_fit == 'Log Phase':
+                    fit_start_time = lag_phase_end_time
+                    fit_end_time = log_phase_end_time
+                elif phase_to_fit == 'Stationary Phase':
+                    fit_start_time = log_phase_end_time
+                    fit_end_time = stationary_phase_end_time
+                elif phase_to_fit == 'Death Phase':
+                    fit_start_time = stationary_phase_end_time
+                    fit_end_time = death_phase_end_time
+
+                # Plot phases before fitting
+                fig = px.line(df_bg_subtracted, x='Time', y='Average', markers=True, title='Time vs Average',
+                              labels={'Time': 'Time', 'Average': 'Average'},
+                              hover_data={'Time': True, 'Average': True})
+
+                fig.update_layout(title='Time vs Average with Phases')
+                fig.add_vrect(x0=0, x1=lag_phase_end_time, fillcolor="red", opacity=0.3, line_width=0, annotation_text="Lag Phase", annotation_position="top left")
+                fig.add_vrect(x0=lag_phase_end_time, x1=log_phase_end_time, fillcolor="green", opacity=0.3, line_width=0, annotation_text="Log Phase", annotation_position="top left")
+                fig.add_vrect(x0=log_phase_end_time, x1=stationary_phase_end_time, fillcolor="blue", opacity=0.3, line_width=0, annotation_text="Stationary Phase", annotation_position="top left")
+                fig.add_vrect(x0=stationary_phase_end_time, x1=death_phase_end_time, fillcolor="yellow", opacity=0.3, line_width=0, annotation_text="Transition Phase", annotation_position="top left")
+                fig.add_vrect(x0=death_phase_end_time, x1=df_bg_subtracted['Time'].max(), fillcolor="purple", opacity=0.3, line_width=0, annotation_text="Death Phase", annotation_position="top left")
+
+                st.plotly_chart(fig)
+
+                phase_data = df_bg_subtracted[(df_bg_subtracted['Time'] > fit_start_time) & (df_bg_subtracted['Time'] <= fit_end_time)]
+
+                if not phase_data.empty:
+                    # Fit the models
+                    initial_params_exp = [0.0001, phase_data['Average'].iloc[0]]
+                    initial_params_log = [0.0001, phase_data['Average'].iloc[0], 1.0]
+                    initial_params_baranyi = [phase_data['Average'].iloc[0], 0.0001, 1.0]
+                    initial_params_lag_exp_sat = [0.0001, phase_data['Average'].iloc[0], 1.0, 1.0]
+
+                    popt_exp, _ = curve_fit(exponential_growth, phase_data['Time'], phase_data['Average'], p0=initial_params_exp, maxfev=10000)
+                    popt_log, _ = curve_fit(logistic_growth, phase_data['Time'], phase_data['Average'], p0=initial_params_log, maxfev=10000)
+                    popt_baranyi, _ = curve_fit(baranyi_growth, phase_data['Time'], phase_data['Average'], p0=initial_params_baranyi, maxfev=10000)
+                    popt_lag_exp_sat, _ = curve_fit(lag_exponential_saturation_growth, phase_data['Time'], phase_data['Average'], p0=initial_params_lag_exp_sat, maxfev=10000)
+
+                    # Calculate fitted values
+                    fit_exp = exponential_growth(phase_data['Time'], *popt_exp)
+                    fit_log = logistic_growth(phase_data['Time'], *popt_log)
+                    fit_baranyi = baranyi_growth(phase_data['Time'], *popt_baranyi)
+                    fit_lag_exp_sat = lag_exponential_saturation_growth(phase_data['Time'], *popt_lag_exp_sat)
+
+                    # Calculate metrics
+                    metrics_exp = calculate_metrics(phase_data['Average'], fit_exp, len(popt_exp))
+                    metrics_log = calculate_metrics(phase_data['Average'], fit_log, len(popt_log))
+                    metrics_baranyi = calculate_metrics(phase_data['Average'], fit_baranyi, len(popt_baranyi))
+                    metrics_lag_exp_sat = calculate_metrics(phase_data['Average'], fit_lag_exp_sat, len(popt_lag_exp_sat))
+
+                    # Display the metrics
+                    metrics = pd.DataFrame({
+                        "Model": ["Exponential", "Logistic", "Baranyi", "Lag-Exponential-Saturation"],
+                        "RSS": [metrics_exp[0], metrics_log[0], metrics_baranyi[0], metrics_lag_exp_sat[0]],
+                        "R-squared": [metrics_exp[1], metrics_log[1], metrics_baranyi[1], metrics_lag_exp_sat[1]],
+                        "AIC": [metrics_exp[2], metrics_log[2], metrics_baranyi[2], metrics_lag_exp_sat[2]]
+                    })
+
+                    best_model_index = metrics['AIC'].idxmin()
+                    best_model_name = metrics.loc[best_model_index, 'Model']
+                    best_params = None
+                    if best_model_name == "Exponential":
+                        best_params = popt_exp
+                    elif best_model_name == "Logistic":
+                        best_params = popt_log
+                    elif best_model_name == "Baranyi":
+                        best_params = popt_baranyi
+                    elif best_model_name == "Lag-Exponential-Saturation":
+                        best_params = popt_lag_exp_sat
+
+                    st.write("### Model Metrics")
+                    st.write(metrics)
+
+                    # Display the best fit parameters as a table
+                    params_df = pd.DataFrame([best_params], columns=['Parameter ' + str(i+1) for i in range(len(best_params))])
+                    st.write(f"### Best Fit Model: {best_model_name}")
+                    st.write("### Best Fit Parameters")
+                    st.write(params_df)
+
+                    # Add the best fit model to the plot
+                    if best_model_name == "Exponential":
+                        fig.add_trace(go.Scatter(x=phase_data['Time'], y=fit_exp, mode='lines', name='Exponential Fit', line=dict(color='orange')))
+                    elif best_model_name == "Logistic":
+                        fig.add_trace(go.Scatter(x=phase_data['Time'], y=fit_log, mode='lines', name='Logistic Fit', line=dict(color='blue')))
+                    elif best_model_name == "Baranyi":
+                        fig.add_trace(go.Scatter(x=phase_data['Time'], y=fit_baranyi, mode='lines', name='Baranyi Fit', line=dict(color='red')))
+                    elif best_model_name == "Lag-Exponential-Saturation":
+                        fig.add_trace(go.Scatter(x=phase_data['Time'], y=fit_lag_exp_sat, mode='lines', name='Lag-Exponential-Saturation Fit', line=dict(color='purple')))
+
+                    st.plotly_chart(fig)
 
 if __name__ == "__main__":
     main()
