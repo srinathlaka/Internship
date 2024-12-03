@@ -11,3 +11,4 @@ scipy==1.14.1
 streamlit==1.40.2
 streamlit_authenticator==0.4.1
 sympy==1.12.1
+distutils
